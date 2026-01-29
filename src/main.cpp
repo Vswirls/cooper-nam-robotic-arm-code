@@ -1,0 +1,144 @@
+/*
+ * Author: Cooper Nam
+ * Date: January 12th, 2026
+ * Inspiration: Smartbuilds.io
+ */
+
+#include <Arduino.h>
+#include <Wire.h>
+
+// stores latest values of each sensor from Uno (0 - 1023)
+int pinkie = 0; //pinkie thumb
+int finger = 0; //finger thumb
+int thumb = 0; //index thumb
+
+int pinkie_Data = A1;
+int finger_Data = A2;
+int thumb_Data = A3;
+//stores the analog pins locations for each thumb
+
+const int MPU2 = 0x69, MPU1 = 0x68;
+/*
+for the MPU6050, default I2C address is 0x68
+if AD0 pin is pulled high enough, address can turn into 0x69
+- allows for readings at mutliple sites
+*/
+
+
+//First MPU6050
+
+int16_t AcX1, AcY1, AcZ1, Tmp1, GyX1, GyY1, GyZ1;
+/* creates 16-bit values to hold sensor outputs from IMU
+Ac1: Accelerometer raw values
+Tmp1: Internal temperature
+Gy1: Gyro raw values
+*/
+
+int minVal = 265;
+int maxVal = 402;
+/*normalizing values that are used with the Arduino map function
+- 90 and 90 degrees are proprtionally scaled to 265 and 402
+* these values may need to be changed based off hard testing with values *
+- minVal represents extreme tilt one way and maxVal represent tilt the other way
+*/
+
+double x;
+double y;
+double z;
+//computed tilt angles from the accelerometer
+
+//Second MPU6050
+
+int16_t AcX2, AcY2, AcZ2, Tmp2, GyX2, GyY2, GyZ2;
+int minVal2 = 265;
+int maxVal2 = 402;
+//same as before, new values may need to be calibrated
+double x2;
+double y2;
+double z2;
+
+/*
+Flex sensor debugging and value tracking
+Checks the upper and lower limits of the flex sensor used:
+Pinkie, Finger, and Thumb
+*/
+
+int thumb_high = 0;
+int thumb_low = 0;
+int finger_high = 0;
+int finger_low = 0;
+int pinkie_high = 0;
+int pinkie_low = 0;
+
+bool bool_calibrate = false;
+/* when false -> normal operation
+ * when true -> code updates high-low values and prints them for debugging
+*/
+
+int response_time = 100;
+//sends control updates every 100ms
+
+
+void setup() {
+  pinMode(3, OUTPUT);
+  /*digital pin 3 is an output; pin 3 is PWM(Pulse Width Modulation) capable
+  - Status LED for the glove
+  */
+  Wire.begin(); //initializes I2C master
+  Wire.beginTransmission(MPU1);
+  Wire.write(0x6B); //writes to PWR_MGMT_1 and registers it
+  Wire.write(0); //turns it on and clears the SLEEP bit
+  /*MPU6050 #1 turns on and begins sampling gyro and accelerometer data
+  * Without this, all IMU reads return as 0 and it appears "dead"
+  */
+  Wire.endTransmission(true);
+
+  Wire.beginTransmission(MPU2); //Arduino addresses the second I2C at a different address
+  Wire.write(0x6B);
+  Wire.write(0);
+  Wire.endTransmission(true);
+  Serial.begin(4800); //Stable, low error rate, and enough bandwidth for 10hz sensor values
+  /*Use higher baud rate for debugging 
+  eg. 9600 allows faster processing with larger streams
+  * Arduino and Serial Moniter need to have matching baud rates
+  */
+  delay(1000); //stabilization and connection time, prevents junk readings
+
+}
+
+void loop() {
+  // put your main code here, to run repeatedly:
+}
+
+void GetMpuValue1(const int MPU1) {
+  Wire.beginTransmission(MPU1);
+  Wire.write(0x3B); //reads from register 0x3B
+  Wire.endTransmission(false); //ends write, but doesn't release the bus, allowing immediate address read
+  Wire.requestFrom(MPU1, 14, true); //requests 14 bytes (0x3B - 0x48), then sends a STOP (true)
+  
+  AcX1 = Wire.read() << 8 | Wire.read(); //0x3B: ACCEL_XOUT_H, 0x3C: ACCEL_XOUT_L
+  AcY1 = Wire.read() << 8 | Wire.read(); //0x3D (ACCEL_YOUT_H) & 0x3E (ACCEL_YOUT_L)
+  AcZ1 = Wire.read() << 8 | Wire.read(); //0x3F (ACCEL_ZOUT_H) & 0x40 (ACCEL_ZOUT_L)
+  
+  //combines two 8 bit values into one 16 bit value
+
+  Tmp1 = Wire.read() << 8 | Wire.read(); //0x41 (TEMP_OUT_H) & 0x42 (TEMP_OUT_L)
+  
+  int xAng = map(AcX1, minVal, maxVal, -90, 90);
+  int yAng = map(AcY1, minVal, maxVal, -90, 90);
+  int zAng = map(AcZ1, minVal, maxVal, -90, 90);
+  /*linearly rescales values using Arduino map function
+  * minVal and maxVal may need physical testing / adjusting
+  * important: these are only normalized axis values, not true angles
+  */
+
+  GyX1 = Wire.read() << 8 | Wire.read(); //0x43 (GYRO_XOUT_H) & 0x44 (GYRO_XOUT_L)
+  GyY1 = Wire.read() << 8 | Wire.read(); //0x45 (GYRO_YOUT_H) & 0x46 (GYRO_YOUT_L)
+  GyZ1 = Wire.read() << 8 | Wire.read(); //0x47 (GYRO_ZOUT_H) & 0x48 (GYRO_ZOUT_L)
+
+  x = RAD_TO_DEG * (atan2(-yAng, -zAng) + PI); //normalizing values
+  y = RAD_TO_DEG * (atan2(-xAng, -zAng) + PI);
+  z = RAD_TO_DEG * (atan2(-yAng, -xAng) + PI); //may have to manually offset after testing
+
+
+}
