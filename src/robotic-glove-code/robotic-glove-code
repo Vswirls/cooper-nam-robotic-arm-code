@@ -34,12 +34,12 @@ Tmp1: Internal temperature
 Gy1: Gyro raw values
 */
 
-int minVal = 265;
-int maxVal = 402;
+int minVal2 = 265;
+int maxVal2 = 402;
 /*normalizing values that are used with the Arduino map function
 - 90 and 90 degrees are proprtionally scaled to 265 and 402
 * these values may need to be changed based off hard testing with values *
-- minVal represents extreme tilt one way and maxVal represent tilt the other way
+- minVal2 represents extreme tilt one way and maxVal2 represent tilt the other way
 */
 
 double x;
@@ -107,7 +107,132 @@ void setup() {
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
+  digitalWrite(3, HIGH); //LED is turned on to see if value is being sent
+
+  //debug_flex(); -> Debug mode
+  //Serial.println("test");
+  
+  GetMpuValue1(MPU1); //consistently updating globals and values
+  delay(10); //slight pause, allows to not hammer I2C
+
+  GetMpuValue2(MPU2);
+  delay(10);
+
+
+  /*
+  
+  Sending letter signals to robot arm via bluetooth for processing
+  Values may need to be adjusted / hardcoded for code to properly work
+
+  */
+
+  //Move left
+  if (x > 15 && x < 55 && y < 30) {
+    Serial.println("L");
+    delay(response_time);
+  }
+
+  //Move right
+  if (x < 310 && x > 270) {
+    Serial.println("R");
+    delay(response_time);
+  }
+
+  //Claw moves up
+  if (y < 80 && y > 60) {
+    Serial.println("UC");
+    delay(response_time);
+  }
+
+  //Claw moves down
+  if (y < 310 && y > 270) {
+    Serial.println("UD");
+    delay(response_time);
+  }
+
+  //Move right (specify in hardware debugging)
+  if (y2 > 50 && y2 < 85) {
+    Serial.print("C");
+    delay(response_time);
+  }
+
+  //Move left (specify what is moving left in debugging)
+  if (y2 < 160 && y2 > 120) {
+    Serial.print("c");
+    delay(response_time);
+  }
+
+  //read the values from the flex sensors (A1 - A3 ports)
+
+  pinkie = analogRead(pinkie_Data);
+  thumb = analogRead(thumb_Data);
+  finger = analogRead(finger_Data);
+
+  /*
+
+  Quick and dirty calibration block:
+  Sets the high and low values (currently at zero) to a certain percentage
+  of the pinkie, thumb, and finger data
+  * runs only once, as bool calibration will turn true after
+  *MUST START WITH HAND STRAIGHTENED
+
+  */
+
+  //Values may need to be hardcoded after physical implementation
+  if (bool_calibrate == false) {
+    delay(1000);
+
+    pinkie_low = (0.8 * pinkie);
+    pinkie_high = (1.06 * pinkie);
+
+    thumb_low = (0.9 * thumb);
+    thumb_high = (1.15 * thumb);
+
+    finger_low = (0.8 * finger);
+    finger_high = (1.03 * finger);
+
+    bool_calibrate = true; //sets to true so if block only runs once
+  }
+
+  delay(response_time);
+
+  //Pinkie
+  if (pinkie >= pinkie_high) {
+    Serial.println("P");
+    delay(response_time);
+  }
+  //if bends enough -> "P"
+  //if straightens enough -> "p"
+  if (pinkie <= pinkie_low) {
+    Serial.println("p");
+    delay(response_time);
+  }
+
+  //Thumb
+  if (thumb >= thumb_high) {
+    Serial.println("T");
+    delay(response_time);
+  }
+
+  if (thumb <= thumb_low) {
+    Serial.println("t");
+    delay(response_time);
+  }
+
+  //Finger
+  if (finger >= finger_high) {
+    Serial.println("F");
+    delay(response_time);
+  }
+
+  if (finger <= finger_low) {
+    Serial.println("f");
+    delay(response_time);
+  }
+
+  else {
+    delay(5);
+  }
 }
 
 void GetMpuValue1(const int MPU1) {
@@ -120,15 +245,15 @@ void GetMpuValue1(const int MPU1) {
   AcY1 = Wire.read() << 8 | Wire.read(); //0x3D (ACCEL_YOUT_H) & 0x3E (ACCEL_YOUT_L)
   AcZ1 = Wire.read() << 8 | Wire.read(); //0x3F (ACCEL_ZOUT_H) & 0x40 (ACCEL_ZOUT_L)
   
-  //combines two 8 bit values into one 16 bit value
+  //reads then combines two 8 bit values into one 16 bit value
 
   Tmp1 = Wire.read() << 8 | Wire.read(); //0x41 (TEMP_OUT_H) & 0x42 (TEMP_OUT_L)
   
-  int xAng = map(AcX1, minVal, maxVal, -90, 90);
-  int yAng = map(AcY1, minVal, maxVal, -90, 90);
-  int zAng = map(AcZ1, minVal, maxVal, -90, 90);
+  int xAng = map(AcX1, minVal2, maxVal2, -90, 90);
+  int yAng = map(AcY1, minVal2, maxVal2, -90, 90);
+  int zAng = map(AcZ1, minVal2, maxVal2, -90, 90);
   /*linearly rescales values using Arduino map function
-  * minVal and maxVal may need physical testing / adjusting
+  * minVal2 and maxVal2 may need physical testing / adjusting
   * important: these are only normalized axis values, not true angles
   */
 
@@ -139,4 +264,138 @@ void GetMpuValue1(const int MPU1) {
   x = RAD_TO_DEG * (atan2(-yAng, -zAng) + PI); //normalizing values
   y = RAD_TO_DEG * (atan2(-xAng, -zAng) + PI);
   z = RAD_TO_DEG * (atan2(-yAng, -xAng) + PI); //may have to manually offset after testing
+
+  // Uncomment this section to debug the angles and manually adjust
+  //  Serial.print("AngleX= ");
+  //  Serial.print(x);
+  //  Serial.print("\t");
+  //
+  //  Serial.print("AngleY= ");
+  //  Serial.print(y);
+  //  Serial.print("\t");
+  //
+  //  Serial.print("AngleZ= ");
+  //  Serial.print(z);
+  //  Serial.print("\t");
+  //  Serial.println("-----------------------------------------");
+
+
+  //  Serial.print("AcX = ");
+  //  Serial.print(AcX1);
+  //  Serial.print(" | AcY = ");
+  //  Serial.print(AcY1);
+  //  Serial.print(" | AcZ = ");
+  //  Serial.print(AcZ1);
+  //  Serial.print(" | GyX = ");
+  //  Serial.print(GyX1);
+  //  Serial.print(" | GyY = ");
+  //  Serial.print(GyY1);
+  //  Serial.print(" | GyZ = ");
+  //  Serial.println(GyZ1);
+  
+}
+
+void GetMpuValue2(const int MPU2) {
+  Wire.beginTransmission(MPU2);
+  Wire.write(0x3B); //reads from register 0x3B
+  Wire.endTransmission(false); //ends write, but doesn't release the bus, allowing immediate address read
+  Wire.requestFrom(MPU2, 14, true); //requests 14 bytes (0x3B - 0x48), then sends a STOP (true)
+  
+  AcX2 = Wire.read() << 8 | Wire.read(); //0x3B: ACCEL_XOUT_H, 0x3C: ACCEL_XOUT_L
+  AcY2 = Wire.read() << 8 | Wire.read(); //0x3D (ACCEL_YOUT_H) & 0x3E (ACCEL_YOUT_L)
+  AcZ2 = Wire.read() << 8 | Wire.read(); //0x3F (ACCEL_ZOUT_H) & 0x40 (ACCEL_ZOUT_L)
+  
+  //combines two 8 bit values into one 16 bit value
+
+  Tmp2 = Wire.read() << 8 | Wire.read(); //0x41 (TEMP_OUT_H) & 0x42 (TEMP_OUT_L)
+  
+  int xAng = map(AcY2, minVal2, maxVal2, -90, 90);
+  int yAng = map(AcY2, minVal2, maxVal2, -90, 90);
+  int zAng = map(AcZ2, minVal2, maxVal2, -90, 90);
+  /*linearly rescales values using Arduino map function
+  * minVal2 and maxVal2 may need physical testing / adjusting
+  * important: these are only normalized axis values, not true angles
+  */
+
+  GyX2 = Wire.read() << 8 | Wire.read(); //0x43 (GYRO_XOUT_H) & 0x44 (GYRO_XOUT_L)
+  GyY2 = Wire.read() << 8 | Wire.read(); //0x45 (GYRO_YOUT_H) & 0x46 (GYRO_YOUT_L)
+  GyZ2 = Wire.read() << 8 | Wire.read(); //0x47 (GYRO_ZOUT_H) & 0x48 (GYRO_ZOUT_L)
+
+  x2 = RAD_TO_DEG * (atan2(-yAng, -zAng) + PI); //normalizing values
+  y2 = RAD_TO_DEG * (atan2(-xAng, -zAng) + PI);
+  z2 = RAD_TO_DEG * (atan2(-yAng, -xAng) + PI); //may have to manually offset after testing
+   
+  // Uncomment this section to debug the angles and manually adjust
+  //    Serial.print("AcX = ");
+  //    Serial.print(AcX2);
+  //    Serial.print(" | AcY = ");
+  //    Serial.print(AcY2);
+  //    Serial.print(" | AcZ = ");
+  //    Serial.print(AcZ2);
+  //    Serial.print(" | GyX = ");
+  //    Serial.print(GyX2);
+  //    Serial.print(" | GyY = ");
+  //    Serial.print(GyY2);
+  //    Serial.print(" | GyZ = ");
+  //    Serial.println(GyZ2);
+  //
+  //    Serial.print("AngleX2= ");
+  //    Serial.print(x2);
+  //    Serial.print("\t");
+  //
+  //    Serial.print("AngleY2= ");
+  //    Serial.print(y2);
+  //    Serial.print("\t");
+  //
+  //    Serial.print("AngleZ2= ");
+  //    Serial.print(z2);
+  //    Serial.print("\t");
+  //  Serial.println("-----------------------------------------");
+}
+
+void debug_flex() {
+  //Sends values from the serial monitor to the port
+
+  //Thumb (claw open / close)
+  Serial.print("Thumb: ");
+  Serial.print(thumb);
+  Serial.print("\t");
+
+  //Thumb parameters
+
+  Serial.print("T_High: ");
+  Serial.print(thumb_high);
+  Serial.print("\t");
+  Serial.print("T_Low: ");
+  Serial.print(thumb_low);
+  Serial.print("\t");
+
+  //Finger (claw manueverability)
+  Serial.print("Finger: ");
+  Serial.print(finger);
+  Serial.print("\t");
+
+  //Finger parameters
+  Serial.print("F_High: ");
+  Serial.print(finger_high);
+  Serial.print("\t");
+  Serial.print("F_Low: ");
+  Serial.print(finger_low);
+  Serial.print("\t");
+
+  //Pinkie (claw manueverability)
+  Serial.print("Pinkie: ");
+  Serial.print(pinkie);
+  Serial.print("\t");
+
+  //Pinkie parameters
+  Serial.print("P_High: ");
+  Serial.print(pinkie_high);
+  Serial.print("\t");
+  Serial.print("P_Low: ");
+  Serial.print(pinkie_low);
+  Serial.print("\t");
+
+  //new line
+  Serial.println();
 }
